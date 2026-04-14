@@ -1,157 +1,200 @@
 <!DOCTYPE html>
-<html lang="pt-BR" data-bs-theme="dark">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>thIAguinho Hub - Acesso ao Ecossistema Digital</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>JARVIS Evolution — Acesso Restrito</title>
     
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-    
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/design.css">
     
     <style>
-        body { background-color: #050505; font-family: 'Segoe UI', system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; color: #fff; overflow: hidden; }
-        .bg-animated { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle at top left, #1e293b 0%, #050505 100%); z-index: 1; }
-        .login-card { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 24px; padding: 60px 50px; width: 100%; max-width: 480px; box-shadow: 0 30px 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.1); position: relative; z-index: 2; }
-        .form-control { background-color: rgba(0,0,0,0.5) !important; border: 1px solid rgba(255, 255, 255, 0.1) !important; color: #fff !important; padding: 16px; border-radius: 12px; font-size: 1.1rem; transition: all 0.3s ease; }
-        .form-control:focus { border-color: #0dcaf0 !important; box-shadow: 0 0 0 4px rgba(13, 202, 240, 0.1); background-color: rgba(0,0,0,0.8) !important; }
-        .input-group-text { background-color: rgba(0,0,0,0.5); border: 1px solid rgba(255, 255, 255, 0.1); border-right: none; color: #0dcaf0; border-radius: 12px 0 0 12px; }
-        .form-control { border-left: none; }
-        .btn-primary { background: linear-gradient(135deg, #0dcaf0 0%, #0891b2 100%); border: none; font-weight: 800; padding: 16px; border-radius: 12px; font-size: 1.2rem; color: #000; letter-spacing: 1px; transition: all 0.3s ease; }
-        .btn-primary:hover { transform: translateY(-3px); box-shadow: 0 15px 30px rgba(13, 202, 240, 0.3); }
-        .toast-container { position: fixed; top: 30px; right: 30px; z-index: 9999; }
-        .brand-icon { font-size: 4rem; background: -webkit-linear-gradient(#0dcaf0, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 20px rgba(13, 202, 240, 0.5)); }
+        /* Estilos base exclusivos para isolar a tela de login perfeitamente */
+        body.login-page {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #121214;
+            background-image: radial-gradient(circle at top right, rgba(14, 165, 233, 0.1), transparent 40%),
+                              radial-gradient(circle at bottom left, rgba(16, 185, 129, 0.05), transparent 40%);
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #e1e1e6;
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 400px;
+            padding: 40px;
+            background: #202024;
+            border: 1px solid #323238;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            text-align: center;
+        }
+
+        .login-logo {
+            font-size: 2rem;
+            font-weight: 900;
+            letter-spacing: -1px;
+            margin-bottom: 10px;
+            color: #fff;
+        }
+
+        .login-logo span {
+            color: #0ea5e9;
+        }
+
+        .login-subtitle {
+            color: #8d8d99;
+            font-size: 0.9rem;
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            text-align: left;
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            color: #c4c4cc;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .login-input {
+            width: 100%;
+            padding: 14px;
+            background: #121214;
+            border: 1px solid #323238;
+            border-radius: 8px;
+            color: #e1e1e6;
+            font-size: 1rem;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+
+        .login-input:focus {
+            outline: none;
+            border-color: #0ea5e9;
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 14px;
+            background: #0ea5e9;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 10px;
+        }
+
+        .btn-login:hover {
+            background: #0284c7;
+        }
+
+        .btn-login:disabled {
+            background: #323238;
+            color: #8d8d99;
+            cursor: not-allowed;
+        }
+
+        .login-error {
+            color: #ef4444;
+            font-size: 0.85rem;
+            margin-top: 15px;
+            display: none;
+            background: rgba(239, 68, 68, 0.1);
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
     </style>
 </head>
-<body>
+<body class="login-page">
 
-    <div class="bg-animated"></div>
-    <div class="toast-container" id="toastContainer"></div>
+    <div class="login-container">
+        <div class="login-logo">TS<span>SAAS</span></div>
+        <div class="login-subtitle">Sistema de Gestão Automotiva Integrada</div>
 
-    <div class="login-card text-center">
-        <i class="bi bi-fingerprint brand-icon mb-2"></i>
-        <h2 class="fw-bold mt-2 mb-1" style="letter-spacing: 2px;">THIAGUINHO HUB</h2>
-        <p class="text-white-50 mb-5 small text-uppercase" style="letter-spacing: 3px;">Ecossistema Global de Soluções</p>
-        
-        <form onsubmit="realizarLoginUniversal(event)">
-            <div class="mb-4 text-start">
-                <label class="form-label text-white-50 fw-bold small text-uppercase ms-1">Usuário / Identificação</label>
-                <div class="input-group shadow-sm">
-                    <span class="input-group-text"><i class="bi bi-person-bounding-box"></i></span>
-                    <input type="text" class="form-control" id="loginUser" required placeholder="Digite sua credencial">
-                </div>
-            </div>
-            <div class="mb-5 text-start">
-                <label class="form-label text-white-50 fw-bold small text-uppercase ms-1">Chave de Segurança</label>
-                <div class="input-group shadow-sm">
-                    <span class="input-group-text"><i class="bi bi-shield-lock-fill"></i></span>
-                    <input type="password" class="form-control" id="loginPass" required placeholder="••••••••">
-                </div>
-            </div>
-            <button type="submit" class="btn btn-primary w-100 shadow" id="btnAcesso">INICIAR SESSÃO SEGURA</button>
-        </form>
-        <div class="mt-5 pt-4 border-top border-secondary text-center">
-            <small class="text-white-50 fw-bold d-block">Powered by <span class="text-info">thIAguinho Soluções Digitais</span> &copy; 2026</small>
+        <div class="form-group">
+            <label for="email">E-mail de Acesso</label>
+            <input type="email" id="email" class="login-input" placeholder="seu@email.com" autocomplete="email">
         </div>
+
+        <div class="form-group">
+            <label for="senha">Senha</label>
+            <input type="password" id="senha" class="login-input" placeholder="••••••••" autocomplete="current-password">
+        </div>
+
+        <button id="btnEntrar" class="btn-login" onclick="fazerLogin()">Acessar Sistema</button>
+        
+        <div id="msgErro" class="login-error"></div>
     </div>
 
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+    <script src="js/config.js"></script>
+    <script src="js/core.js"></script>
+
     <script>
-        const firebaseConfig = {
-            apiKey: "AIzaSyBqIuCsHHuy_f-mBWV4JBkbyOorXpqQvqg",
-            authDomain: "hub-thiaguinho.firebaseapp.com",
-            projectId: "hub-thiaguinho",
-            storageBucket: "hub-thiaguinho.firebasestorage.app",
-            messagingSenderId: "453508098543",
-            appId: "1:453508098543:web:305f4d48edd9be40bd6e1a"
-        };
-        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
-        const db = firebase.firestore();
+        // Interação simples de UX na tela de login (A lógica real de Auth estará no core.js)
+        document.addEventListener('DOMContentLoaded', () => {
+            const inputSenha = document.getElementById('senha');
+            const inputEmail = document.getElementById('email');
 
-        function showToast(msg, isError = true) {
-            const bg = isError ? 'bg-danger' : 'bg-success';
-            const icon = isError ? 'bi-exclamation-triangle-fill' : 'bi-check-circle-fill';
-            const id = 'toast_' + Date.now();
-            const t = document.createElement('div');
-            t.innerHTML = `<div id="${id}" class="toast align-items-center text-white ${bg} border-0 show p-3 mt-2 shadow-lg rounded-4"><div class="d-flex"><div class="toast-body fw-bold fs-6"><i class="bi ${icon} me-2"></i> ${msg}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>`;
-            document.getElementById('toastContainer').appendChild(t.firstChild);
-            setTimeout(() => { const el = document.getElementById(id); if(el) el.remove(); }, 4000);
-        }
-
-        function rotearParaNicho(nicho) {
-            let paginaDestino = 'painel_generico.html'; 
-            const n = (nicho || '').toLowerCase();
-
-            if (n.includes('oficina') || n.includes('retifica') || n.includes('car') || n.includes('moto')) { paginaDestino = 'painel_oficina.html'; } 
-            else if (n.includes('odonto') || n.includes('medicina') || n.includes('saude')) { paginaDestino = 'painel_saude.html'; } 
-            else if (n.includes('educacao') || n.includes('kumon') || n.includes('escola')) { paginaDestino = 'painel_escola.html'; } 
-            else if (n.includes('distribuidora') || n.includes('loja') || n.includes('pdv')) { paginaDestino = 'painel_varejo.html'; }
-            else if (n.includes('barbearia') || n.includes('salao') || n.includes('estetica')) { paginaDestino = 'painel_beleza.html'; }
-            else if (n.includes('eventos') || n.includes('corrida') || n.includes('esporte')) { paginaDestino = 'painel_eventos.html'; }
-            else if (n.includes('marcenaria') || n.includes('construtora') || n.includes('projeto')) { paginaDestino = 'painel_projetos.html'; }
-            else if (n.includes('game') || n.includes('jogo')) { paginaDestino = 'painel_games.html'; }
-
-            window.location.href = paginaDestino;
-        }
-
-        async function realizarLoginUniversal(e) {
-            e.preventDefault();
-            const usr = document.getElementById('loginUser').value.trim();
-            const pwd = document.getElementById('loginPass').value.trim();
-            const btn = document.getElementById('btnAcesso');
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Acessando Nuvem...'; btn.disabled = true;
-
-            try {
-                if (usr === 'thiaguinho' && pwd === 'master2026') {
-                    sessionStorage.setItem('thiaguinho_master', 'true');
-                    window.location.href = 'superadmin.html';
-                    return;
+            // Permite logar apertando 'Enter'
+            inputSenha.addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') {
+                    fazerLogin();
                 }
-
-                // Validação do Dono (Admin)
-                const tenantSnap = await db.collection('oficinas').where('usuario', '==', usr).get();
-                if (!tenantSnap.empty) {
-                    const doc = tenantSnap.docs[0];
-                    const dados = doc.data();
-                    if (dados.senha !== pwd) { showToast('Senha incorreta.'); }
-                    else if (dados.status === 'Bloqueado') { showToast('Assinatura Bloqueada. Contate a thIAguinho Soluções.'); }
-                    else {
-                        sessionStorage.setItem('t_id', doc.id); sessionStorage.setItem('t_nome', dados.nomeFantasia);
-                        sessionStorage.setItem('t_nicho', dados.nicho); sessionStorage.setItem('t_role', 'admin');
-                        sessionStorage.setItem('f_nome', 'Gestor Master'); sessionStorage.setItem('f_comissao', '0'); 
-                        sessionStorage.setItem('t_mods', JSON.stringify(dados.modulos || {}));
-                        sessionStorage.setItem('t_cloudName', (dados.apiKeys && dados.apiKeys.cloudinaryName) ? dados.apiKeys.cloudinaryName : '');
-                        sessionStorage.setItem('t_cloudPreset', (dados.apiKeys && dados.apiKeys.cloudinaryPreset) ? dados.apiKeys.cloudinaryPreset : '');
-                        sessionStorage.setItem('t_gemini', (dados.apiKeys && dados.apiKeys.gemini) ? dados.apiKeys.gemini : '');
-                        rotearParaNicho(dados.nicho);
-                    }
-                } 
-                else {
-                    // Validação do Funcionário / Mecânico
-                    const funcSnap = await db.collection('funcionarios').where('usuario', '==', usr).get();
-                    if (!funcSnap.empty) {
-                        const docF = funcSnap.docs[0];
-                        const dadosF = docF.data();
-                        if (dadosF.senha !== pwd) { showToast('Senha incorreta.'); }
-                        else {
-                            const empresaMae = await db.collection('oficinas').doc(dadosF.tenantId).get();
-                            if(!empresaMae.exists || empresaMae.data().status === 'Bloqueado') {
-                                showToast('Matriz inativa. Acesso negado.');
-                            } else {
-                                sessionStorage.setItem('t_id', dadosF.tenantId); sessionStorage.setItem('t_nome', empresaMae.data().nomeFantasia);
-                                sessionStorage.setItem('t_nicho', empresaMae.data().nicho); sessionStorage.setItem('f_id', docF.id); 
-                                sessionStorage.setItem('f_nome', dadosF.nome); sessionStorage.setItem('f_comissao', dadosF.comissao || '0'); 
-                                sessionStorage.setItem('t_role', 'equipe'); sessionStorage.setItem('t_mods', JSON.stringify(empresaMae.data().modulos || {}));
-                                sessionStorage.setItem('t_cloudName', (empresaMae.data().apiKeys && empresaMae.data().apiKeys.cloudinaryName) ? empresaMae.data().apiKeys.cloudinaryName : '');
-                                sessionStorage.setItem('t_cloudPreset', (empresaMae.data().apiKeys && empresaMae.data().apiKeys.cloudinaryPreset) ? empresaMae.data().apiKeys.cloudinaryPreset : '');
-                                rotearParaNicho(empresaMae.data().nicho);
-                            }
-                        }
-                    } else { showToast('Usuário não localizado no ecossistema.'); }
+            });
+            inputEmail.addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') {
+                    inputSenha.focus();
                 }
-            } catch (err) { console.error(err); showToast('Falha de rede estrutural.'); }
-            btn.innerHTML = 'INICIAR SESSÃO SEGURA'; btn.disabled = false;
+            });
+        });
+
+        // Função de ponte para o core.js
+        function fazerLogin() {
+            const email = document.getElementById('email').value.trim();
+            const senha = document.getElementById('senha').value.trim();
+            const btn = document.getElementById('btnEntrar');
+            const msgErro = document.getElementById('msgErro');
+
+            if (!email || !senha) {
+                msgErro.textContent = 'Por favor, preencha e-mail e senha.';
+                msgErro.style.display = 'block';
+                return;
+            }
+
+            msgErro.style.display = 'none';
+            btn.disabled = true;
+            btn.textContent = 'Autenticando...';
+
+            // Chama a função global de autenticação que estará no js/core.js
+            if(window.autenticarUsuario) {
+                window.autenticarUsuario(email, senha).catch(err => {
+                    btn.disabled = false;
+                    btn.textContent = 'Acessar Sistema';
+                    msgErro.textContent = err.message || 'Erro ao autenticar. Verifique suas credenciais.';
+                    msgErro.style.display = 'block';
+                });
+            } else {
+                msgErro.textContent = 'Erro de sistema: Módulos não carregados (core.js pendente).';
+                msgErro.style.display = 'block';
+                btn.disabled = false;
+                btn.textContent = 'Acessar Sistema';
+            }
         }
     </script>
 </body>
