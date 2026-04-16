@@ -78,8 +78,8 @@ window.JARVIS_CONST = {
 
   // Mensagens WhatsApp B2C
   WPP_MSGS: {
-    orcamento: (nome, veiculo, oficina, total, link, pin) =>
-      `Olá ${nome}! 👋\n\nO orçamento do seu *${veiculo}* está pronto na *${oficina}*.\n\n💰 *Total: R$ ${total}*\n\nAcesse seu portal exclusivo:\n🔗 ${link}\n🔑 PIN: *${pin}*`,
+    orcamento: (nome, veiculo, oficina, total, link, login, senha) =>
+      `Olá ${nome}! 👋\n\nO orçamento do seu *${veiculo}* está pronto na *${oficina}*.\n\n💰 *Total: R$ ${total}*\n\nAcesse seu portal exclusivo:\n🔗 ${link}\n\n🔐 Login: *${login}*\n🔑 Senha: *${senha}*`,
     pronto: (nome, veiculo, oficina) =>
       `🎉 Olá ${nome}! Seu *${veiculo}* está pronto para retirada na *${oficina}*. Agradecemos a preferência!`,
     revisao: (nome, veiculo, data) =>

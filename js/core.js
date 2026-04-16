@@ -16,7 +16,10 @@
 window.J = {
   // SESSÃO
   tid:         sessionStorage.getItem('j_tid')          || null,
-  role:        sessionStorage.getItem('j_role')         || null,
+  role:        (() => {
+    const r = sessionStorage.getItem('j_role') || null;
+    return r === 'gerente' ? 'gestor' : r;
+  })(),
   nome:        sessionStorage.getItem('j_nome')         || 'Usuário',
   tnome:       sessionStorage.getItem('j_tnome')        || 'Oficina',
   fid:         sessionStorage.getItem('j_fid')          || null,
@@ -48,20 +51,20 @@ window.J = {
 
 // ── RBAC ───────────────────────────────────────────────────
 window.PERM = {
-  criarOS:          r => ['admin','gestor','atendente'].includes(r),
-  editarOS:         r => ['admin','gestor','atendente'].includes(r),
-  deletarOS:        r => ['admin','gestor'].includes(r),
-  moverStatus:      r => ['admin','gestor','atendente','mecanico'].includes(r),
-  adicionarLog:     r => ['admin','gestor','atendente','mecanico'].includes(r),
-  verFinanceiro:    r => ['admin'].includes(r),
-  verDRE:           r => ['admin','gestor'].includes(r),
-  verRelatorios:    r => ['admin','gestor'].includes(r),
-  gerenciarEquipe:  r => ['admin','gestor'].includes(r),
+  criarOS:          r => ['admin','gestor','gerente','atendente'].includes(r),
+  editarOS:         r => ['admin','gestor','gerente','atendente'].includes(r),
+  deletarOS:        r => ['admin','gestor','gerente'].includes(r),
+  moverStatus:      r => ['admin','gestor','gerente','atendente','mecanico','equipe'].includes(r),
+  adicionarLog:     r => ['admin','gestor','gerente','atendente','mecanico','equipe'].includes(r),
+  verFinanceiro:    r => ['admin','gestor','gerente'].includes(r),
+  verDRE:           r => ['admin','gestor','gerente'].includes(r),
+  verRelatorios:    r => ['admin','gestor','gerente'].includes(r),
+  gerenciarEquipe:  r => ['admin','gestor','gerente'].includes(r),
   configCloudinary: r => ['admin'].includes(r),
-  deletarLog:       r => ['admin','gestor','atendente'].includes(r),
-  deletarMidia:     r => ['admin','gestor','atendente'].includes(r),
-  acessarIA:        r => ['admin','gestor'].includes(r),
-  verComissoes:     r => ['admin','gestor'].includes(r),
+  deletarLog:       r => ['admin','gestor','gerente','atendente'].includes(r),
+  deletarMidia:     r => ['admin','gestor','gerente','atendente'].includes(r),
+  acessarIA:        r => ['admin','gestor','gerente'].includes(r),
+  verComissoes:     r => ['admin','gestor','gerente'].includes(r),
 };
 
 window.pode = acao => {
@@ -82,10 +85,11 @@ window.initCore = function() {
   _escutarClientes();
   _escutarVeiculos();
   _escutarEstoque();
-  _escutarFinanceiro();
+  if (pode('verFinanceiro')) _escutarFinanceiro();
   _escutarEquipe();
   _escutarFornecedores();
   _escutarMensagens();
+  _escutarChatEquipe();
   _escutarAgendamentos();
   _escutarAuditoria();
   _escutarNotificacoes();
@@ -123,7 +127,7 @@ function _populateBaseUI() {
 }
 
 function _roleLabel(role) {
-  return { admin:'ADMINISTRADOR', gestor:'GESTOR MASTER', atendente:'ATENDENTE', mecanico:'MECÂNICO', equipe:'EQUIPE', cliente:'CLIENTE' }[role] || (role||'').toUpperCase();
+  return { admin:'ADMINISTRADOR', gestor:'GESTOR MASTER', gerente:'GESTOR MASTER', atendente:'ATENDENTE', mecanico:'MECÂNICO', equipe:'EQUIPE', cliente:'CLIENTE' }[role] || (role||'').toUpperCase();
 }
 
 function _aplicarRestricoesPorRole() {
@@ -134,7 +138,7 @@ function _aplicarRestricoesPorRole() {
   if (!pode('acessarIA'))     document.querySelectorAll('[data-role-hide*="ia"]').forEach(el => el.style.display='none');
   const roleEl = document.getElementById('sbUserRole');
   if (roleEl) {
-    const colors = { admin:'var(--brand)', gestor:'var(--success)', atendente:'var(--warn)', mecanico:'#FF8C00' };
+    const colors = { admin:'var(--brand)', gestor:'var(--success)', gerente:'var(--success)', atendente:'var(--warn)', mecanico:'#FF8C00' };
     roleEl.style.color = colors[J.role] || 'var(--text-muted)';
   }
 }
@@ -144,7 +148,11 @@ function _escutarOS() {
   J.db.collection('ordens_servico')
     .where('tenantId', '==', J.tid)
     .onSnapshot(snap => {
-      J.os = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      J.os = snap.docs.map(d => {
+        const item = { id: d.id, ...d.data() };
+        item.status = _statusCanonico(item.status);
+        return item;
+      });
       window.renderKanban        && renderKanban();
       window.renderDashboard     && renderDashboard();
       window.calcComissoes       && calcComissoes();
@@ -204,8 +212,11 @@ function _escutarFornecedores() {
 function _escutarMensagens() {
   J.db.collection('mensagens').where('tenantId', '==', J.tid).onSnapshot(snap => {
     J.mensagens = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b)=>(a.ts||0)-(b.ts||0));
-    window.renderChatLista && renderChatLista();
-    if (J.chatAtivo && window.renderChatMsgs) renderChatMsgs(J.chatAtivo);
+    const modo = window._chatModo || 'clientes';
+    if (modo === 'clientes') {
+      window.renderChatLista && renderChatLista();
+      if (J.chatAtivo && window.renderChatMsgs) renderChatMsgs(J.chatAtivo);
+    }
     const unread = J.mensagens.filter(m => m.sender === 'cliente' && !m.lidaAdmin).length;
     setBadge('chatBadge', unread);
   });
@@ -244,6 +255,8 @@ function _escutarChatEquipe() {
   J.db.collection('chat_equipe').where('tenantId', '==', J.tid).onSnapshot(snap => {
     J.chatEquipe = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b)=>(a.ts||0)-(b.ts||0));
     window.renderChatEquipe && renderChatEquipe();
+    window.renderChatEquipeAdmin && renderChatEquipeAdmin();
+    if (window.renderChatMsgsEquipeAdmin) renderChatMsgsEquipeAdmin();
     const n = J.chatEquipe.filter(m => m.sender==='admin' && !m.lidaEquipe && m.para===J.fid).length;
     setBadge('chatTabBadge', n);
   });
@@ -269,7 +282,7 @@ window.atualizarPainelAtencao = function() {
   let temAlerta = false;
 
   container.innerHTML = Object.entries(alertas).map(([key, cfg]) => {
-    const lista = J.os.filter(o => o.status === key);
+    const lista = J.os.filter(o => _statusCanonico(o.status) === key);
     if (lista.length > 0) temAlerta = true;
 
     const items = lista.map(o => {
@@ -288,6 +301,19 @@ window.atualizarPainelAtencao = function() {
   const led = document.getElementById('alertaLed');
   if (led) led.style.display = temAlerta ? 'block' : 'none';
 };
+
+function _statusCanonico(status) {
+  const map = {
+    Aguardando: 'Triagem', patio: 'Triagem', box: 'Andamento',
+    aprovacao: 'Orcamento_Enviado', faturado: 'Pronto',
+    concluido: 'Entregue', Concluido: 'Entregue',
+    EM_SERVICO: 'Andamento', Em_servico: 'Andamento', em_servico: 'Andamento',
+    triagem: 'Triagem', orcamento: 'Orcamento', orcamento_enviado: 'Orcamento_Enviado',
+    aprovado: 'Aprovado', andamento: 'Andamento', pronto: 'Pronto',
+    entregue: 'Entregue', cancelado: 'Cancelado'
+  };
+  return map[status] || status || 'Triagem';
+}
 
 window._abrirDetalheOS = function(osId) {
   window._osDetalheAberta = osId;

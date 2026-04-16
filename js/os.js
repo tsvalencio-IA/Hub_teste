@@ -12,6 +12,9 @@ const STATUS_LEGADO = {
   'Aguardando':'Triagem','patio':'Triagem','box':'Andamento',
   'aprovacao':'Orcamento_Enviado','faturado':'Pronto','cancelado':'Cancelado',
   'concluido':'Entregue','Concluido':'Entregue',
+  'EM_SERVICO':'Andamento','Em_servico':'Andamento','em_servico':'Andamento',
+  'triagem':'Triagem','orcamento':'Orcamento','orcamento_enviado':'Orcamento_Enviado',
+  'aprovado':'Aprovado','andamento':'Andamento','pronto':'Pronto','entregue':'Entregue','cancelado':'Cancelado',
   'Triagem':'Triagem','Orcamento':'Orcamento','Orcamento_Enviado':'Orcamento_Enviado',
   'Aprovado':'Aprovado','Andamento':'Andamento','Pronto':'Pronto','Entregue':'Entregue','Cancelado':'Cancelado'
 };
@@ -138,17 +141,35 @@ window.moverStatusOS = async function(id, novoStatus) {
 };
 
 // ── WHATSAPP B2C ───────────────────────────────────────────
-window.enviarWppB2C = function(id) {
+window.enviarWppB2C = async function(id) {
   const os = J.os.find(x => x.id === id); if (!os) return;
   const c  = J.clientes.find(x => x.id === os.clienteId);
   const v  = J.veiculos.find(x => x.id === os.veiculoId);
   const cel = os.celular || c?.wpp || '';
   if (!cel) { toastWarn('⚠ Cliente sem WhatsApp'); return; }
-  const pin    = os.pin || randId(6);
-  const link   = window.location.origin + '/cliente.html';
-  const cliNome = (c?.nome || os.cliente || 'Cliente').split(' ')[0];
+  let login  = c?.login || (c?.email || '').trim();
+  let senha  = c?.pin || os.pin || '';
+  if (c && !login && c.email) {
+    login = c.email.trim();
+    try { await J.db.collection('clientes').doc(c.id).update({ login, updatedAt: new Date().toISOString() }); } catch(e) {}
+  }
+  if (c && !senha) {
+    senha = randId(6);
+    try { await J.db.collection('clientes').doc(c.id).update({ pin: senha, updatedAt: new Date().toISOString() }); } catch(e) {}
+  }
+  if (!login || !senha) { toastWarn('⚠ Cliente sem login/senha válidos para acesso ao portal'); return; }
+  const link   = 'https://tsvalencio-ia.github.io/of/clientes.html';
+  const cliNome = (c?.nome || os.cliente || 'Cliente');
   const veicNome = v?.modelo || os.veiculo || 'veículo';
-  const msg = JARVIS_CONST.WPP_MSGS.orcamento(cliNome, veicNome, J.tnome, (os.total||0).toFixed(2).replace('.',','), link, pin);
+  const msg = JARVIS_CONST.WPP_MSGS.orcamento(
+    cliNome,
+    veicNome,
+    J.tnome,
+    (os.total||0).toFixed(2).replace('.',','),
+    link,
+    login || 'não informado',
+    senha
+  );
   window.open(`https://wa.me/55${cel.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`, '_blank');
   audit('WHATSAPP', `Enviou orçamento B2C para ${os.placa||veicNome}`);
 };
@@ -295,6 +316,9 @@ window.checkPgtoOS = function() {
 // ── SALVAR OS ──────────────────────────────────────────────
 window.salvarOS = async function() {
   const osId = _v('osId');
+  const osAtual = osId ? J.os.find(x => x.id === osId) : null;
+  const stAtual = osAtual ? (STATUS_LEGADO[osAtual.status]||osAtual.status) : 'Triagem';
+  const jaFinalizada = !!osAtual && ['Pronto','Entregue'].includes(stAtual);
 
   // Validações obrigatórias
   const placa = _v('osPlaca');
@@ -311,9 +335,7 @@ window.salvarOS = async function() {
   }
   // Regra: Execução exige aprovação
   if (status === 'Andamento') {
-    const osAtual = J.os.find(x => x.id === osId);
-    const stAtual = osAtual ? (STATUS_LEGADO[osAtual.status]||osAtual.status) : 'Triagem';
-    if (!['Aprovado','Andamento','Orcamento_Enviado'].includes(stAtual) && !osId) {
+    if (!['Aprovado','Andamento','Orcamento_Enviado'].includes(stAtual)) {
       toastWarn('⚠ A O.S. precisa ser aprovada antes de ir para execução'); return;
     }
   }
@@ -338,7 +360,7 @@ window.salvarOS = async function() {
     const estoqueId = sel?.value;
 
     // Validação estoque negativo apenas na conclusão
-    if (estoqueId && ['Pronto','Entregue'].includes(status) && !osId) {
+    if (estoqueId && ['Pronto','Entregue'].includes(status) && !jaFinalizada) {
       const item = J.estoque.find(x => x.id === estoqueId);
       if (item && (item.qtd||0) < qtd) {
         toastWarn(`⚠ Estoque insuficiente: ${item.desc} (${item.qtd||0} disponível)`);
@@ -363,7 +385,7 @@ window.salvarOS = async function() {
 
   // Montar timeline
   const tl = JSON.parse(document.getElementById('osTimelineData')?.value||'[]');
-  const stAtualTL = osId ? (STATUS_LEGADO[J.os.find(x=>x.id===osId)?.status]||status) : 'Nova';
+  const stAtualTL = osId ? (STATUS_LEGADO[osAtual?.status]||stAtual||status) : 'Nova';
   const acaoTL    = osId ? `Editou O.S. | Status: ${stAtualTL} → ${status}` : `Abriu nova O.S. | Status: ${status}`;
   tl.push({ dt: new Date().toISOString(), user: J.nome, role: J.role, acao: acaoTL, tipo: 'edicao', antes: stAtualTL, depois: status });
 
@@ -398,7 +420,7 @@ window.salvarOS = async function() {
 
   try {
     // ── GERAÇÃO FINANCEIRA AO FECHAR A OS ──────────────────
-    if (['Pronto','Entregue'].includes(status) && _v('osPgtoForma') && _v('osPgtoData')) {
+    if (['Pronto','Entregue'].includes(status) && _v('osPgtoForma') && _v('osPgtoData') && !jaFinalizada) {
       await _gerarFinanceiroOS(payload, pecas, totalMO, totalPecas, osId);
     }
 

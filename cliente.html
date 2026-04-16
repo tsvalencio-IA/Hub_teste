@@ -26,6 +26,10 @@ body { background: var(--bg); }
 .msg-c.saida  { background: var(--brand-dim); border: 1px solid var(--border2); align-self: flex-end; }
 .msg-c.entrada{ background: var(--surf3); border: 1px solid var(--border); align-self: flex-start; }
 .msg-time { font-family: var(--fm); font-size: 0.58rem; color: var(--text-muted); margin-top: 4px; text-align: right; }
+.cli-mini-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; margin-bottom:12px; }
+.cli-mini-card { background:var(--surf); border:1px solid var(--border); padding:12px; }
+.cli-mini-title { font-family:var(--fm); font-size:.6rem; color:var(--text-muted); letter-spacing:1.2px; margin-bottom:6px; }
+.cli-mini-body { font-size:.8rem; line-height:1.4; }
 </style>
 </head>
 <body>
@@ -79,6 +83,16 @@ body { background: var(--bg); }
 
     <!-- OS ATIVAS -->
     <div id="cliTabOS">
+      <div class="cli-mini-grid">
+        <div class="cli-mini-card">
+          <div class="cli-mini-title">MEUS VEÍCULOS</div>
+          <div class="cli-mini-body" id="cliVeiculosResumo">Carregando...</div>
+        </div>
+        <div class="cli-mini-card">
+          <div class="cli-mini-title">RECADOS DA OFICINA</div>
+          <div class="cli-mini-body" id="cliRecadosResumo">Sem recados.</div>
+        </div>
+      </div>
       <div id="cliOSLista">
         <div class="empty-state"><div class="empty-state-icon">🔧</div><div class="empty-state-sub">Carregando...</div></div>
       </div>
@@ -86,6 +100,10 @@ body { background: var(--bg); }
 
     <!-- HISTÓRICO -->
     <div id="cliTabHistorico" style="display:none">
+      <div class="cli-mini-card" style="margin-bottom:12px">
+        <div class="cli-mini-title">HISTÓRICO FINANCEIRO</div>
+        <div class="cli-mini-body" id="cliFinanceiroResumo">Carregando...</div>
+      </div>
       <div id="cliHistoricoLista">
         <div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-sub">Carregando histórico...</div></div>
       </div>
@@ -96,6 +114,9 @@ body { background: var(--bg); }
       <div class="chat-cli">
         <div class="chat-msg-list" id="cliChatMsgs"></div>
         <div style="padding:12px;border-top:1px solid var(--border);display:flex;gap:8px;background:var(--surf2)">
+          <button class="btn btn-ghost" id="cliBtnPTT" onclick="cliTogglePTT()" title="Áudio" style="padding:8px 10px">🎤</button>
+          <button class="btn btn-ghost" onclick="document.getElementById('cliChatFile').click()" title="Anexar" style="padding:8px 10px">📎</button>
+          <input type="file" id="cliChatFile" style="display:none" accept="image/*,video/*,audio/*,application/pdf" onchange="cliEnviarArquivo(this)">
           <input class="j-input" id="cliChatInput" placeholder="Escreva sua mensagem..." style="flex:1">
           <button class="btn btn-brand" onclick="cliEnviarMsg()">ENVIAR</button>
         </div>
@@ -110,6 +131,11 @@ let _cliData = null;    // dados do cliente logado
 let _cliTid  = null;    // tenantId
 let _cliOSes = [];      // OS do cliente
 let _cliMsgs = [];      // mensagens do cliente
+let _cliVeiculos = [];  // veículos do cliente
+let _cliFinanceiro = []; // histórico financeiro do cliente
+let _cliRecados = [];   // recados da oficina
+let _cliCloudName = 'dmuvm1o6m';
+let _cliCloudPreset = 'evolution';
 let _unsub   = [];      // unsubscribers
 
 const STATUS_ORDEM = ['Triagem','Orcamento','Orcamento_Enviado','Aprovado','Andamento','Pronto','Entregue'];
@@ -117,6 +143,14 @@ const STATUS_LABELS = {
   'Triagem':'Triagem','Orcamento':'Orçamento','Orcamento_Enviado':'Orç. Enviado',
   'Aprovado':'Aprovado','Andamento':'Em Serviço','Pronto':'Pronto!','Entregue':'Entregue'
 };
+const STATUS_CANON = {
+  Aguardando:'Triagem', patio:'Triagem', box:'Andamento', aprovacao:'Orcamento_Enviado',
+  faturado:'Pronto', concluido:'Entregue', Concluido:'Entregue',
+  EM_SERVICO:'Andamento', Em_servico:'Andamento', em_servico:'Andamento',
+  triagem:'Triagem', orcamento:'Orcamento', orcamento_enviado:'Orcamento_Enviado',
+  aprovado:'Aprovado', andamento:'Andamento', pronto:'Pronto', entregue:'Entregue', cancelado:'Cancelado'
+};
+function cliStatusCanon(st){ return STATUS_CANON[st] || st || 'Triagem'; }
 
 function moeda(v) { return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(parseFloat(v)||0); }
 function dtBr(iso) { if(!iso) return '—'; try{return new Date(iso).toLocaleDateString('pt-BR');}catch{return iso;} }
@@ -184,6 +218,8 @@ async function clienteLogin() {
     root.style.setProperty('--brand-dim', `rgba(59,130,246,.12)`);
 
     document.querySelectorAll('.brand-name').forEach(el=>el.textContent=od.brandName||od.nomeFantasia||'JARVIS ERP');
+    _cliCloudName = od.apiKeys?.cloudName || _cliCloudName;
+    _cliCloudPreset = od.apiKeys?.cloudPreset || _cliCloudPreset;
 
     document.getElementById('cliNomeDisplay').textContent = 'Olá, '+_cliData.nome.split(' ')[0]+'!';
     document.getElementById('cliTenantDisplay').textContent = od.nomeFantasia||'Oficina';
@@ -215,7 +251,11 @@ function _iniciarListeners() {
     .where('tenantId','==',_cliTid)
     .where('clienteId','==',_cliData.id)
     .onSnapshot(snap=>{
-      _cliOSes = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>b.createdAt>a.createdAt?1:-1);
+      _cliOSes = snap.docs.map(d=>{
+        const item={id:d.id,...d.data()};
+        item.status = cliStatusCanon(item.status);
+        return item;
+      }).sort((a,b)=>b.createdAt>a.createdAt?1:-1);
       _renderOS();
       _renderHistorico();
     });
@@ -228,16 +268,47 @@ function _iniciarListeners() {
     .onSnapshot(snap=>{
       _cliMsgs = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.ts||0)-(b.ts||0));
       _renderChat();
+      _renderRecados();
       const naoLidas=_cliMsgs.filter(m=>m.sender==='admin'&&!m.lidaCliente).length;
       const badge=document.getElementById('cliChatBadge');
       if(badge){badge.style.display=naoLidas>0?'inline':'none';badge.textContent=naoLidas;}
     });
   _unsub.push(unMsg);
+
+  const unVeic = db.collection('veiculos')
+    .where('tenantId','==',_cliTid)
+    .where('clienteId','==',_cliData.id)
+    .onSnapshot(snap=>{
+      _cliVeiculos = snap.docs.map(d=>({id:d.id,...d.data()}));
+      _renderVeiculosResumo();
+    });
+  _unsub.push(unVeic);
+
+  const unFin = db.collection('financeiro')
+    .where('tenantId','==',_cliTid)
+    .where('clienteId','==',_cliData.id)
+    .onSnapshot(snap=>{
+      _cliFinanceiro = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.venc||'').localeCompare(a.venc||''));
+      _renderFinanceiroHistorico();
+    });
+  _unsub.push(unFin);
+
+  const unRec = db.collection('notificacoes_live')
+    .where('tenantId','==',_cliTid)
+    .onSnapshot(snap=>{
+      _cliRecados = snap.docs
+        .map(d=>({id:d.id,...d.data()}))
+        .filter(r=>!r.clienteId || r.clienteId===_cliData.id)
+        .sort((a,b)=>(b.ts||0)-(a.ts||0))
+        .slice(0,5);
+      _renderRecados();
+    });
+  _unsub.push(unRec);
 }
 
 // ── RENDER OS ATIVAS ───────────────────────────────────────
 function _renderOS() {
-  const ativas = _cliOSes.filter(o=>o.status!=='Entregue'&&o.status!=='Cancelado');
+  const ativas = _cliOSes.filter(o=>{ const st=cliStatusCanon(o.status); return st!=='Entregue'&&st!=='Cancelado'; });
   const div = document.getElementById('cliOSLista');
 
   if(!ativas.length){
@@ -246,14 +317,15 @@ function _renderOS() {
   }
 
   div.innerHTML=ativas.map(os=>{
-    const stIdx = STATUS_ORDEM.indexOf(os.status);
+    const statusCanon = cliStatusCanon(os.status);
+    const stIdx = STATUS_ORDEM.indexOf(statusCanon);
     const stBar = STATUS_ORDEM.map((s,i)=>`
       <div class="status-step ${i<stIdx?'done':i===stIdx?'active':''}">${STATUS_LABELS[s]||s}</div>`).join('');
     const mediaHtml = (os.media||[]).slice(0,4).map(m=>
       `<img src="${m.url}" class="media-thumb" onclick="window.open('${m.url}')" alt="Foto" loading="lazy">`).join('');
     const tlHtml = os.timeline?.length ? [...os.timeline].reverse().slice(0,3).map(e=>
       `<div style="font-family:var(--fm);font-size:.68rem;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text-muted)">${dtHrBr(e.dt)}</span> — ${e.acao||''}</div>`).join('') : '';
-    const approveBtn = os.status==='Orcamento_Enviado' ? `
+    const approveBtn = statusCanon==='Orcamento_Enviado' ? `
       <div style="margin-top:14px;padding:14px;background:rgba(34,211,160,.08);border:1px solid rgba(34,211,160,.3)">
         <p style="font-family:var(--fm);font-size:.78rem;color:var(--success);margin-bottom:10px">✅ Orçamento aguarda sua aprovação. Total: <strong>${moeda(os.total||0)}</strong></p>
         <button class="btn btn-success" onclick="aprovarOS('${os.id}')">APROVAR E AUTORIZAR SERVIÇO</button>
@@ -300,7 +372,7 @@ async function recusarOS(osId) {
 
 // ── HISTÓRICO ──────────────────────────────────────────────
 function _renderHistorico() {
-  const hist = _cliOSes.filter(o=>['Entregue','Cancelado'].includes(o.status));
+  const hist = _cliOSes.filter(o=>['Entregue','Cancelado'].includes(cliStatusCanon(o.status)));
   const div  = document.getElementById('cliHistoricoLista');
   if(!hist.length){div.innerHTML='<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-sub">Nenhum veículo entregue ainda.</div></div>';return;}
   div.innerHTML=hist.map(os=>`<div class="os-card concluida">
@@ -310,6 +382,31 @@ function _renderHistorico() {
     </div>
     <span class="badge badge-success">${os.status}</span>
   </div>`).join('');
+}
+
+function _renderVeiculosResumo() {
+  const box = document.getElementById('cliVeiculosResumo'); if(!box) return;
+  if(!_cliVeiculos.length){ box.innerHTML='Nenhum veículo cadastrado.'; return; }
+  box.innerHTML = _cliVeiculos.map(v=>`<div>• <strong>${v.placa||'S/PLACA'}</strong> — ${v.modelo||'Veículo'}</div>`).join('');
+}
+
+function _renderFinanceiroHistorico() {
+  const box = document.getElementById('cliFinanceiroResumo'); if(!box) return;
+  if(!_cliFinanceiro.length){ box.innerHTML='Sem lançamentos financeiros vinculados.'; return; }
+  box.innerHTML = _cliFinanceiro.slice(0,8).map(f=>
+    `<div style="display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--border);padding:4px 0">
+      <span>${f.desc||'Lançamento'}</span>
+      <span style="white-space:nowrap;color:${f.tipo==='Entrada'?'var(--success)':'var(--danger)'}">${moeda(f.valor||0)} · ${f.status||'—'}</span>
+    </div>`
+  ).join('');
+}
+
+function _renderRecados() {
+  const box = document.getElementById('cliRecadosResumo'); if(!box) return;
+  const recadosChat = _cliMsgs.filter(m=>m.sender==='admin').slice(-5).reverse().map(m=>({msg:m.msg,ts:m.ts}));
+  const lista = [..._cliRecados, ...recadosChat].sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,5);
+  if(!lista.length){ box.innerHTML='Sem recados.'; return; }
+  box.innerHTML = lista.map(r=>`<div style="border-bottom:1px solid var(--border);padding:4px 0">• ${r.msg||'Recado'} <span style="color:var(--text-muted);font-size:.68rem">(${r.ts?new Date(r.ts).toLocaleDateString('pt-BR'):''})</span></div>`).join('');
 }
 
 // ── CHAT ───────────────────────────────────────────────────
@@ -335,6 +432,55 @@ async function cliEnviarMsg() {
   document.getElementById('cliChatInput').value='';
 }
 document.getElementById('cliChatInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();cliEnviarMsg();}});
+
+async function cliEnviarArquivo(input) {
+  const file = input.files?.[0];
+  if(!file||!_cliTid||!_cliData?.id) return;
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('upload_preset', _cliCloudPreset);
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${_cliCloudName}/auto/upload`, { method:'POST', body:fd });
+    const d = await res.json();
+    if(d.secure_url){
+      await db.collection('mensagens').add({tenantId:_cliTid,clienteId:_cliData.id,sender:'cliente',msg:`📎 Arquivo: ${file.name}`,fileUrl:d.secure_url,fileType:d.resource_type||'file',lidaAdmin:false,lidaCliente:true,ts:Date.now()});
+      toast('✓ Arquivo enviado');
+    } else {
+      toast('Falha no upload do arquivo.','error');
+    }
+  } catch(e) {
+    toast('Erro ao enviar arquivo.','error');
+  } finally {
+    input.value='';
+  }
+}
+
+let _cliMediaRec=null, _cliChunks=[], _cliRec=false;
+async function cliTogglePTT() {
+  const btn=document.getElementById('cliBtnPTT');
+  if(!_cliRec){
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ toast('Microfone não suportado.','error'); return; }
+    try {
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      _cliMediaRec=new MediaRecorder(stream); _cliChunks=[];
+      _cliMediaRec.ondataavailable=e=>{ if(e.data.size>0) _cliChunks.push(e.data); };
+      _cliMediaRec.onstop=async()=>{
+        const blob=new Blob(_cliChunks,{type:'audio/webm'});
+        await cliEnviarArquivo({ files:[new File([blob],'audio.webm',{type:'audio/webm'})], value:'' });
+        stream.getTracks().forEach(t=>t.stop());
+      };
+      _cliMediaRec.start(); _cliRec=true;
+      if(btn){btn.style.background='var(--danger-dim)';btn.style.borderColor='var(--danger)';}
+      toast('🎤 Gravando... toque novamente para enviar.','warn');
+    } catch(e) {
+      toast('Microfone indisponível.','error');
+    }
+  } else {
+    if(_cliMediaRec && _cliMediaRec.state==='recording') _cliMediaRec.stop();
+    _cliRec=false;
+    if(btn){btn.style.background='';btn.style.borderColor='';}
+  }
+}
 
 // ── TABS ───────────────────────────────────────────────────
 function cliTab(key, el) {

@@ -174,9 +174,14 @@ async function autenticar() {
       const mae = await db.collection('oficinas').doc(dF.tenantId).get();
       if (!mae.exists||mae.data().status==='Bloqueado') throw new Error('Oficina bloqueada.');
       const md = mae.data();
+      const cargo = (dF.cargo||'').toLowerCase();
+      let role = 'equipe';
+      let destino = 'equipe.html';
+      if (cargo === 'gerente') { role = 'gestor'; destino = 'jarvis.html'; }
+      else if (['atendente','recepcionista'].includes(cargo)) { role = 'atendente'; destino = 'jarvis.html'; }
       const sessao = {
         j_tid: dF.tenantId, j_tnome: md.nomeFantasia||'Oficina',
-        j_role: dF.cargo==='gerente'?'gerente':'equipe',
+        j_role: role,
         j_nome: dF.nome, j_fid: docF.id,
         j_comissao: String(dF.comissaoServico||dF.comissao||0),
         j_gemini: md.apiKeys?.gemini||'',
@@ -187,8 +192,8 @@ async function autenticar() {
       const brand = _buildBrand(md);
       sessao.j_brand = JSON.stringify(brand);
       Object.entries(sessao).forEach(([k,v]) => sessionStorage.setItem(k,v));
-      _salvarLogin(usr,pwd,'equipe.html',dF.tenantId,sessao,brand);
-      window.location.href = 'equipe.html'; return;
+      _salvarLogin(usr,pwd,destino,dF.tenantId,sessao,brand);
+      window.location.href = destino; return;
     }
 
     throw new Error('Usuário não encontrado no sistema.');

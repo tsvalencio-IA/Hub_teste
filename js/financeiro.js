@@ -155,6 +155,7 @@ window.checkPgtoNF = function() {
 };
 
 window.salvarNF = async function() {
+  if (window.pode && !pode('verFinanceiro')) { toastErr('Acesso negado ao financeiro'); return; }
   const itens=[];
   document.querySelectorAll('#containerItensNF > div').forEach(r=>{
     const desc=r.querySelector('.nf-desc')?.value;
@@ -192,14 +193,19 @@ window.salvarNF = async function() {
     });
   }
 
-  await batch.commit();
-  toastOk('✓ NF lançada e estoque atualizado');
-  fecharModal('modalNF');
-  audit('ESTOQUE/NF',`Entrada NF ${nfNum} — ${fornNome} | ${itens.length} itens`);
+  try {
+    await batch.commit();
+    toastOk('✓ NF lançada e estoque atualizado');
+    fecharModal('modalNF');
+    audit('ESTOQUE/NF',`Entrada NF ${nfNum} — ${fornNome} | ${itens.length} itens`);
+  } catch(e) {
+    toastErr('Erro ao salvar NF: '+e.message);
+  }
 };
 
 // ── PAGAMENTO RH ───────────────────────────────────────────
 window.prepPgtoRH = function() {
+  if (window.pode && !pode('gerenciarEquipe')) { toastErr('Acesso negado ao RH'); return; }
   ['rhPgtoValor','rhPgtoObs'].forEach(f=>_sv(f,''));
   _sv('rhPgtoData',new Date().toISOString().split('T')[0]);
   _sv('rhPgtoTipo','Vale / Adiantamento'); _sv('rhPgtoForma','PIX');
@@ -208,9 +214,12 @@ window.prepPgtoRH = function() {
 };
 
 window.salvarPgtoRH = async function() {
+  if (window.pode && !pode('gerenciarEquipe')) { toastErr('Acesso negado ao RH'); return; }
   if(!_v('rhPgtoFunc')||!_v('rhPgtoValor')){toastWarn('⚠ Selecione colaborador e informe o valor');return;}
   const func=J.equipe.find(f=>f.id===_v('rhPgtoFunc'));
   const valor=parseFloat(_v('rhPgtoValor'));
+  if(!func){toastErr('Colaborador não encontrado');return;}
+  if(!Number.isFinite(valor)||valor<=0){toastWarn('⚠ Valor inválido');return;}
   const tipo=_v('rhPgtoTipo'); const obs=_v('rhPgtoObs');
   const batch=J.db.batch();
 
@@ -232,11 +241,15 @@ window.salvarPgtoRH = async function() {
     createdAt:new Date().toISOString()
   });
 
-  await batch.commit();
-  toastOk('✓ Pagamento RH registrado no caixa');
-  audit('RH',`${tipo} de ${moeda(valor)} para ${func.nome}`);
-  fecharModal('modalPgtoRH');
-  calcComissoes && calcComissoes();
+  try {
+    await batch.commit();
+    toastOk('✓ Pagamento RH registrado no caixa');
+    audit('RH',`${tipo} de ${moeda(valor)} para ${func.nome}`);
+    fecharModal('modalPgtoRH');
+    calcComissoes && calcComissoes();
+  } catch(e) {
+    toastErr('Erro ao registrar pagamento RH: '+e.message);
+  }
 };
 
 // ── EXPORTAR CSV ───────────────────────────────────────────
