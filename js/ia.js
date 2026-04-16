@@ -267,6 +267,8 @@ window.setChatModo = function(modo='clientes') {
   } else {
     window.renderChatLista && renderChatLista();
     if (J.chatAtivo && window.renderChatMsgs) renderChatMsgs(J.chatAtivo);
+    const head=document.getElementById('chatHeadText') || document.getElementById('chatHead');
+    if(head && !J.chatAtivo) head.textContent='Selecione um cliente para iniciar';
   }
 };
 
@@ -314,6 +316,7 @@ window.togglePTT = async function() {
 
 // ── CHAT EQUIPE ↔ ADMIN ────────────────────────────────────
 window.renderChatEquipe = function() {
+  if (!J.fid) return;
   const container=document.getElementById('chatMsgs'); if(!container) return;
   const msgs = J.chatEquipe.filter(m => m.de===J.fid || m.para===J.fid || (m.sender==='equipe' && m.de===J.fid));
   if(!msgs.length){container.innerHTML='<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-sub">Sem mensagens ainda</div></div>';return;}
@@ -350,12 +353,19 @@ window.renderChatEquipeAdmin = function() {
   const lista=document.getElementById('chatLista');
   if(!lista) return;
 
-  const contatos = J.equipe.map(f=>{
-    const msgs=J.chatEquipe.filter(m=>m.de===f.id||m.para===f.id);
+  const ids = new Set(J.equipe.map(f=>f.id));
+  J.chatEquipe.forEach(m => {
+    if (m.de && m.de !== 'admin') ids.add(m.de);
+    if (m.para && m.para !== 'admin') ids.add(m.para);
+  });
+
+  const contatos = [...ids].map(fid=>{
+    const f = J.equipe.find(x=>x.id===fid) || { id: fid, nome: `Colaborador ${String(fid).slice(-4)}` };
+    const msgs=J.chatEquipe.filter(m=>m.de===fid||m.para===fid);
     const ultima=msgs[msgs.length-1];
-    const n=msgs.filter(m=>m.sender==='equipe'&&!m.lidaAdmin&&m.de===f.id).length;
+    const n=msgs.filter(m=>m.sender==='equipe'&&!m.lidaAdmin&&m.de===fid).length;
     return {f,ultima,n};
-  }).filter(x=>x.ultima||x.f.nome);
+  }).sort((a,b)=>(b.ultima?.ts||0)-(a.ultima?.ts||0));
 
   if(!contatos.length){
     lista.innerHTML='<div class="empty-state" style="padding:20px"><div class="empty-state-icon">💬</div><div class="empty-state-sub">Sem conversas com equipe</div></div>';

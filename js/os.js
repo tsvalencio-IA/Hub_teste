@@ -316,6 +316,9 @@ window.checkPgtoOS = function() {
 // ── SALVAR OS ──────────────────────────────────────────────
 window.salvarOS = async function() {
   const osId = _v('osId');
+  const osAtual = osId ? J.os.find(x => x.id === osId) : null;
+  const stAtual = osAtual ? (STATUS_LEGADO[osAtual.status]||osAtual.status) : 'Triagem';
+  const jaFinalizada = !!osAtual && ['Pronto','Entregue'].includes(stAtual);
 
   // Validações obrigatórias
   const placa = _v('osPlaca');
@@ -332,9 +335,7 @@ window.salvarOS = async function() {
   }
   // Regra: Execução exige aprovação
   if (status === 'Andamento') {
-    const osAtual = J.os.find(x => x.id === osId);
-    const stAtual = osAtual ? (STATUS_LEGADO[osAtual.status]||osAtual.status) : 'Triagem';
-    if (!['Aprovado','Andamento','Orcamento_Enviado'].includes(stAtual) && !osId) {
+    if (!['Aprovado','Andamento','Orcamento_Enviado'].includes(stAtual)) {
       toastWarn('⚠ A O.S. precisa ser aprovada antes de ir para execução'); return;
     }
   }
@@ -359,7 +360,7 @@ window.salvarOS = async function() {
     const estoqueId = sel?.value;
 
     // Validação estoque negativo apenas na conclusão
-    if (estoqueId && ['Pronto','Entregue'].includes(status) && !osId) {
+    if (estoqueId && ['Pronto','Entregue'].includes(status) && !jaFinalizada) {
       const item = J.estoque.find(x => x.id === estoqueId);
       if (item && (item.qtd||0) < qtd) {
         toastWarn(`⚠ Estoque insuficiente: ${item.desc} (${item.qtd||0} disponível)`);
@@ -384,7 +385,7 @@ window.salvarOS = async function() {
 
   // Montar timeline
   const tl = JSON.parse(document.getElementById('osTimelineData')?.value||'[]');
-  const stAtualTL = osId ? (STATUS_LEGADO[J.os.find(x=>x.id===osId)?.status]||status) : 'Nova';
+  const stAtualTL = osId ? (STATUS_LEGADO[osAtual?.status]||stAtual||status) : 'Nova';
   const acaoTL    = osId ? `Editou O.S. | Status: ${stAtualTL} → ${status}` : `Abriu nova O.S. | Status: ${status}`;
   tl.push({ dt: new Date().toISOString(), user: J.nome, role: J.role, acao: acaoTL, tipo: 'edicao', antes: stAtualTL, depois: status });
 
@@ -419,7 +420,7 @@ window.salvarOS = async function() {
 
   try {
     // ── GERAÇÃO FINANCEIRA AO FECHAR A OS ──────────────────
-    if (['Pronto','Entregue'].includes(status) && _v('osPgtoForma') && _v('osPgtoData')) {
+    if (['Pronto','Entregue'].includes(status) && _v('osPgtoForma') && _v('osPgtoData') && !jaFinalizada) {
       await _gerarFinanceiroOS(payload, pecas, totalMO, totalPecas, osId);
     }
 
