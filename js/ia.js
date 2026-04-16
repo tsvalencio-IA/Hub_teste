@@ -6,6 +6,7 @@
 
 // ── GEMINI IA ──────────────────────────────────────────────
 let _iaHistorico = [];
+window._chatModo = window._chatModo || 'clientes';
 
 window.iaPerguntar = async function() {
   const inp = document.getElementById('iaInput');
@@ -177,7 +178,8 @@ window.renderChatLista = function() {
     const msgs=J.mensagens.filter(m=>m.clienteId===c.id);
     const ultima=msgs[msgs.length-1];
     const naoLidas=msgs.filter(m=>m.sender==='cliente'&&!m.lidaAdmin).length;
-    return `<div class="chat-contact ${J.chatAtivo===c.id?'active':''}" onclick="abrirChatCRM('${c.id}','${c.nome}')">
+    const nomeEsc = (c.nome||'').replace(/'/g,"\\'");
+    return `<div class="chat-contact ${J.chatAtivo===c.id?'active':''}" onclick="abrirChatCRM('${c.id}','${nomeEsc}')">
       <div class="chat-contact-name">${c.nome} ${naoLidas>0?`<span class="chat-unread">${naoLidas}</span>`:''}</div>
       <div class="chat-contact-last">${ultima?.msg||'Sem mensagens'}</div>
     </div>`;
@@ -186,7 +188,8 @@ window.renderChatLista = function() {
 
 window.abrirChatCRM = function(cid, nome) {
   J.chatAtivo = cid;
-  const head=document.getElementById('chatHead'); if(head) head.textContent='ATENDIMENTO: '+(nome||'').toUpperCase();
+  const head=document.getElementById('chatHeadText') || document.getElementById('chatHead');
+  if(head) head.textContent='ATENDIMENTO: '+(nome||'').toUpperCase();
   const foot=document.getElementById('chatFoot'); if(foot) foot.style.display='flex';
   renderChatMsgs(cid);
   J.mensagens.filter(m=>m.clienteId===cid&&m.sender==='cliente'&&!m.lidaAdmin)
@@ -200,7 +203,7 @@ window.renderChatMsgs = function(cid) {
   container.innerHTML=msgs.map(m=>{
     const t=m.ts?new Date(m.ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'';
     const dir=m.sender==='admin'?'outgoing':'incoming';
-    return `<div class="chat-msg ${dir}">${m.msg||''}<div class="msg-time">${t}</div></div>`;
+    return `<div class="chat-msg ${dir}">${m.msg||''}${m.fileUrl?`<br><a href="${m.fileUrl}" target="_blank" style="color:var(--brand)">📎 Ver arquivo</a>`:''}<div class="msg-time">${t}</div></div>`;
   }).join('');
   container.scrollTop=container.scrollHeight;
 };
@@ -213,21 +216,58 @@ window.enviarChat = async function(txt) {
 
 document.addEventListener('DOMContentLoaded', ()=>{
   const el=document.getElementById('chatInput');
-  if(el) el.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();enviarChat();} });
+  if(el) el.addEventListener('keydown',e=>{
+    if(e.key==='Enter'&&!e.shiftKey){
+      e.preventDefault();
+      if (window._chatModo === 'equipe') enviarMsgEquipeAdmin();
+      else enviarChat();
+    }
+  });
+  if (document.getElementById('chatModeClientes')) setChatModo('clientes');
 });
 
 // Enviar arquivo no chat
 window.enviarArquivoChat = async function(input) {
-  const file=input.files[0]; if(!file||!J.chatAtivo) return;
+  const file=input.files[0];
+  const isEquipe = window._chatModo === 'equipe';
+  if(!file) return;
+  if(isEquipe && !J.chatEquipeAtivo) return;
+  if(!isEquipe && !J.chatAtivo) return;
   try {
     const fd=new FormData(); fd.append('file',file); fd.append('upload_preset',J.cloudPreset);
     const res=await fetch(`https://api.cloudinary.com/v1_1/${J.cloudName}/auto/upload`,{method:'POST',body:fd});
     const data=await res.json();
     if(data.secure_url){
-      await J.db.collection('mensagens').add({tenantId:J.tid,clienteId:J.chatAtivo,sender:'admin',msg:`📎 Arquivo: ${file.name}`,fileUrl:data.secure_url,fileType:data.resource_type,lidaCliente:false,lidaAdmin:true,ts:Date.now()});
+      if (isEquipe) {
+        await J.db.collection('chat_equipe').add({tenantId:J.tid,de:'admin',para:J.chatEquipeAtivo,sender:'admin',msg:`📎 Arquivo: ${file.name}`,fileUrl:data.secure_url,fileType:data.resource_type,lidaAdmin:true,lidaEquipe:false,ts:Date.now()});
+      } else {
+        await J.db.collection('mensagens').add({tenantId:J.tid,clienteId:J.chatAtivo,sender:'admin',msg:`📎 Arquivo: ${file.name}`,fileUrl:data.secure_url,fileType:data.resource_type,lidaCliente:false,lidaAdmin:true,ts:Date.now()});
+      }
       toastOk('✓ Arquivo enviado');
     }
   } catch(e){ toastErr('Erro ao enviar arquivo'); }
+  finally { input.value=''; }
+};
+
+window.setChatModo = function(modo='clientes') {
+  window._chatModo = modo;
+  const bCli=document.getElementById('chatModeClientes');
+  const bEq=document.getElementById('chatModeEquipe');
+  if (bCli) bCli.classList.toggle('btn-brand', modo==='clientes');
+  if (bEq) bEq.classList.toggle('btn-brand', modo==='equipe');
+  const input=document.getElementById('chatInput');
+  if (input) input.placeholder = modo==='equipe' ? 'Mensagem para a equipe...' : 'Digite sua resposta...';
+  const send=document.getElementById('chatSendBtn');
+  if (send) send.setAttribute('onclick', modo==='equipe' ? 'enviarMsgEquipeAdmin()' : 'enviarChat()');
+
+  if (modo==='equipe') {
+    window.renderChatEquipeAdmin && renderChatEquipeAdmin();
+    const head=document.getElementById('chatHeadText') || document.getElementById('chatHead');
+    if(head && !J.chatEquipeAtivo) head.textContent='Selecione um colaborador para iniciar';
+  } else {
+    window.renderChatLista && renderChatLista();
+    if (J.chatAtivo && window.renderChatMsgs) renderChatMsgs(J.chatAtivo);
+  }
 };
 
 // ── PTT (Push-to-Talk) ─────────────────────────────────────
@@ -235,6 +275,10 @@ let _mediaRec=null, _audioChunks=[], _pttActive=false;
 
 window.togglePTT = async function() {
   const btn=document.getElementById('btnPTT');
+  const isEquipe = window._chatModo === 'equipe';
+  if (!isEquipe && !J.chatAtivo) { toastWarn('⚠ Selecione um cliente no chat'); return; }
+  if (isEquipe && !J.chatEquipeAtivo) { toastWarn('⚠ Selecione um colaborador no chat'); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { toastErr('Microfone não suportado neste dispositivo'); return; }
   if (!_pttActive) {
     try {
       const stream=await navigator.mediaDevices.getUserMedia({audio:true});
@@ -246,8 +290,12 @@ window.togglePTT = async function() {
         try{
           const res=await fetch(`https://api.cloudinary.com/v1_1/${J.cloudName}/auto/upload`,{method:'POST',body:fd});
           const d=await res.json();
-          if(d.secure_url && J.chatAtivo){
-            await J.db.collection('mensagens').add({tenantId:J.tid,clienteId:J.chatAtivo,sender:'admin',msg:'🎤 Áudio',fileUrl:d.secure_url,fileType:'audio',lidaCliente:false,lidaAdmin:true,ts:Date.now()});
+          if(d.secure_url){
+            if (isEquipe) {
+              await J.db.collection('chat_equipe').add({tenantId:J.tid,de:'admin',para:J.chatEquipeAtivo,sender:'admin',msg:'🎤 Áudio',fileUrl:d.secure_url,fileType:'audio',lidaAdmin:true,lidaEquipe:false,ts:Date.now()});
+            } else {
+              await J.db.collection('mensagens').add({tenantId:J.tid,clienteId:J.chatAtivo,sender:'admin',msg:'🎤 Áudio',fileUrl:d.secure_url,fileType:'audio',lidaCliente:false,lidaAdmin:true,ts:Date.now()});
+            }
             toastOk('✓ Áudio enviado');
           }
         } catch(e){ toastErr('Erro ao enviar áudio'); }
@@ -267,8 +315,9 @@ window.togglePTT = async function() {
 // ── CHAT EQUIPE ↔ ADMIN ────────────────────────────────────
 window.renderChatEquipe = function() {
   const container=document.getElementById('chatMsgs'); if(!container) return;
-  if(!J.chatEquipe.length){container.innerHTML='<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-sub">Sem mensagens ainda</div></div>';return;}
-  container.innerHTML=J.chatEquipe.map(m=>{
+  const msgs = J.chatEquipe.filter(m => m.de===J.fid || m.para===J.fid || (m.sender==='equipe' && m.de===J.fid));
+  if(!msgs.length){container.innerHTML='<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-sub">Sem mensagens ainda</div></div>';return;}
+  container.innerHTML=msgs.map(m=>{
     const t=m.ts?new Date(m.ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'';
     const dir=m.sender==='equipe'?'outgoing':'incoming';
     const nome=m.sender==='equipe'?J.nome:'Admin';
@@ -297,5 +346,60 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
 // Render chat da equipe no painel admin (chat com mecânicos)
 window.renderChatEquipeAdmin = function() {
-  // Para o admin responder aos mecânicos
+  if (window._chatModo !== 'equipe') return;
+  const lista=document.getElementById('chatLista');
+  if(!lista) return;
+
+  const contatos = J.equipe.map(f=>{
+    const msgs=J.chatEquipe.filter(m=>m.de===f.id||m.para===f.id);
+    const ultima=msgs[msgs.length-1];
+    const n=msgs.filter(m=>m.sender==='equipe'&&!m.lidaAdmin&&m.de===f.id).length;
+    return {f,ultima,n};
+  }).filter(x=>x.ultima||x.f.nome);
+
+  if(!contatos.length){
+    lista.innerHTML='<div class="empty-state" style="padding:20px"><div class="empty-state-icon">💬</div><div class="empty-state-sub">Sem conversas com equipe</div></div>';
+    return;
+  }
+
+  lista.innerHTML=contatos.map(({f,ultima,n})=>{
+    const nomeEsc=(f.nome||'').replace(/'/g,"\\'");
+    return `<div class="chat-contact ${J.chatEquipeAtivo===f.id?'active':''}" onclick="abrirChatEquipeAdmin('${f.id}','${nomeEsc}')">
+      <div class="chat-contact-name">${f.nome} ${n>0?`<span class="chat-unread">${n}</span>`:''}</div>
+      <div class="chat-contact-last">${ultima?.msg||'Sem mensagens'}</div>
+    </div>`;
+  }).join('');
+
+  if (!J.chatEquipeAtivo && contatos[0]?.f?.id) abrirChatEquipeAdmin(contatos[0].f.id, contatos[0].f.nome);
+};
+
+window.abrirChatEquipeAdmin = function(fid, nome) {
+  J.chatEquipeAtivo = fid;
+  const head=document.getElementById('chatHeadText') || document.getElementById('chatHead');
+  if(head) head.textContent = 'EQUIPE: ' + (nome||'').toUpperCase();
+  const foot=document.getElementById('chatFoot'); if(foot) foot.style.display='flex';
+  renderChatMsgsEquipeAdmin();
+  J.chatEquipe
+    .filter(m=>m.sender==='equipe'&&m.de===fid&&!m.lidaAdmin)
+    .forEach(m=>J.db.collection('chat_equipe').doc(m.id).update({lidaAdmin:true}).catch(()=>{}));
+};
+
+window.renderChatMsgsEquipeAdmin = function() {
+  if (window._chatModo !== 'equipe') return;
+  const container=document.getElementById('chatMsgs'); if(!container) return;
+  const fid=J.chatEquipeAtivo;
+  const msgs=J.chatEquipe.filter(m=>m.de===fid||m.para===fid);
+  if(!msgs.length){container.innerHTML='<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-sub">Sem mensagens ainda</div></div>';return;}
+  container.innerHTML=msgs.map(m=>{
+    const t=m.ts?new Date(m.ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'';
+    const dir=m.sender==='admin'?'outgoing':'incoming';
+    return `<div class="chat-msg ${dir}">${m.msg||''}${m.fileUrl?`<br><a href="${m.fileUrl}" target="_blank" style="color:var(--brand)">📎 Ver arquivo</a>`:''}<div class="msg-time">${t}</div></div>`;
+  }).join('');
+  container.scrollTop=container.scrollHeight;
+};
+
+window.enviarMsgEquipeAdmin = async function() {
+  const msg=_v('chatInput'); if(!msg||!J.chatEquipeAtivo) return;
+  await J.db.collection('chat_equipe').add({tenantId:J.tid,de:'admin',para:J.chatEquipeAtivo,sender:'admin',msg,lidaAdmin:true,lidaEquipe:false,ts:Date.now()});
+  _sv('chatInput','');
 };

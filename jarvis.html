@@ -267,14 +267,20 @@
       <div class="chat-layout">
         <div class="chat-list" id="chatLista"></div>
         <div class="chat-main">
-          <div class="chat-head" id="chatHead">Selecione um cliente para iniciar</div>
+          <div class="chat-head" id="chatHead" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <span id="chatHeadText">Selecione um cliente para iniciar</span>
+            <span style="display:flex;gap:6px">
+              <button class="btn btn-ghost btn-sm" id="chatModeClientes" onclick="setChatModo('clientes')">CLIENTES</button>
+              <button class="btn btn-ghost btn-sm" id="chatModeEquipe" onclick="setChatModo('equipe')">EQUIPE</button>
+            </span>
+          </div>
           <div class="chat-msgs" id="chatMsgs"></div>
           <div class="chat-foot" id="chatFoot">
             <button class="btn btn-ghost" id="btnPTT" onclick="togglePTT()" title="Gravar Áudio" style="padding:8px;border-radius:50%">🎤</button>
             <button class="btn btn-ghost" onclick="document.getElementById('chatFile').click()" title="Anexar" style="padding:8px;border-radius:50%">📎</button>
-            <input type="file" id="chatFile" style="display:none" accept="image/*,video/*,audio/*" onchange="enviarArquivoChat(this)">
+            <input type="file" id="chatFile" style="display:none" accept="image/*,video/*,audio/*,application/pdf" onchange="enviarArquivoChat(this)">
             <input class="j-input" id="chatInput" placeholder="Digite sua resposta..." style="flex:1">
-            <button class="btn btn-brand" onclick="enviarChat()">ENVIAR</button>
+            <button class="btn btn-brand" id="chatSendBtn" onclick="enviarChat()">ENVIAR</button>
           </div>
         </div>
       </div>
